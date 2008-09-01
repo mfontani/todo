@@ -1,0 +1,5 @@
+todo is a simple program which handles todo-lists.
+
+It uses, by default, ~/.todo.
+
+See ./todo --help for more details.
