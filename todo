@@ -33,8 +33,9 @@ use Fatal qw(open close);
 use Data::Dumper;
 
 # Options here
-my $ftodolist = "$ENV{HOME}/.todo";
-my $ftodorc = "$ENV{HOME}/.todorc";
+my $ftodolist = '.todo';
+$ftodolist = "$ENV{HOME}/.todo" if (!-e $ftodolist);
+#my $ftodorc = "$ENV{HOME}/.todorc";
 #my $verbose = 0;
 #my $help;
 #my $man = 0;
@@ -62,34 +63,7 @@ if (!-e $ftodolist) {
 }
 
 my %COMMANDS = (
-	'help' => sub {
-		print "Syntax:\n";
-		print "$0\n";
-		print "    Defaults to LIST\n";
-		print "$0 list|ls SEARCH TERMS\n";
-		print "    Shows all todos that satisfy one of the search terms.\n";
-		print "    The env variable TODOLS can add more search terms to this\n";
-		print "$0 listall|la SEARCH TERMS\n";
-		print "    Same as list|ls, but ignores the TODOLS env variable\n";
-		print "$0 add [p:A-Z] [\@tag \+tag] TEXT\n";
-		print "    Adds a new todo at the bottom of the list\n";
-		print "    p:A-Z indicates a priority, from A to Z.\n";
-		print "    Both priorities and tags are optional.\n";
-		print "$0 done NUMBER\n";
-		print "    Marks the todo # as done\n";
-		print "$0 purge done|number\n";
-		print "    done -> removes all todos marked as done\n";
-		print "    number -> removes the todo # selected\n";
-		print "$0 priority number [A-Z]\n";
-		print "    Sets a new priority for the todo # selected\n";
-		print "$0 text number TEXT\n";
-		print "    Replaces the description for the todo # selected\n";
-		print "$0 tag number [\@context +project][-tag -+tag -\@tag]\n";
-		print "    Adds or removes tags (Contexts/Projects) for the todo # selected\n";
-		print "$0 birdseye\n";
-		print "    Shows list of not completed todos by contexts and projects\n";
-		return;
-	},
+	'help' => \&do_help,
 	'add' => sub {
 		if (scalar @ARGV == 0) {
 			print "Syntax: add [p:A-Z] [\@tag \+project] TEXT\n";
@@ -356,7 +330,7 @@ my %COMMANDS = (
 				@search = ($ENV{TODOLS},@search);
 			}
 		}
-		print "Searching: ", (join(' OR ', @search)), "\n";
+		print "Searching $ftodolist: ", (join(' OR ', @search)), "\n";
 		while (<$F>) {
 			$lineno++;
 			chomp;
@@ -424,20 +398,38 @@ $cmd = lc $cmd;
 my $origcmd = $cmd;
 
 # aliases
+$cmd = 'add' if ($cmd eq 'a');
 $cmd = 'list' if ($cmd eq 'ls');
 $cmd = 'list' if ($cmd eq 'la');
 $cmd = 'list' if ($cmd eq 'listall');
 $cmd = 'help' if ($cmd eq '--help');
 $cmd = 'help' if ($cmd eq '-help');
 $cmd = 'priority' if ($cmd eq 'pri');
+$cmd = 'text' if ($cmd eq 'txt');
 
 if (exists $COMMANDS{$cmd}) {
 	$COMMANDS{$cmd}->($origcmd);
 } else {
 	@ARGV = ($cmd,@ARGV);
-	#print "Unknown command $cmd. Will search for @ARGV\n";
 	$COMMANDS{'list'}->('list');
 }
 
 exit;
+
+sub do_help {
+	print "Syntax:\n";
+	print "todo                  Defaults to LIST\n";
+	print "todo list|ls SEARCH TERMS\n";
+	print "    The env variable TODOLS can add more search terms to this\n";
+	print "todo listall|la SEARCH TERMS\n";
+	print "    Same as list|ls, but ignores the TODOLS env variable\n";
+	print "todo add|a [p:A-Z] [\@context \+project] TEXT\n";
+	print "todo done NUMBER\n";
+	print "todo purge done|NUMBER\n";
+	print "todo priority|pri NUMBER [A-Z]\n";
+	print "todo text|txt NUMBER TEXT\n";
+	print "todo tag NUMBER [\@context +project][-tag -+tag -\@tag]\n";
+	print "todo birdseye\n";
+	return;
+}
 
