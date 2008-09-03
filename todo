@@ -30,7 +30,7 @@ use warnings;
 #use Pod::Usage;
 #use File::Spec; # for base name
 use Fatal qw(open close);
-use Data::Dumper;
+#use Data::Dumper;
 
 # Options here
 my $ftodolist = '.todo';
