@@ -1,6 +1,6 @@
 todo is a simple Perl program which handles lists of todo entries
 Entries can have @categories, +contexts and p:priorities
 
-By default all todos are saved in ~/.todo
+By default all todos are saved in ~/.todo, but a local .todo will be used if found
 
 See ./todo --help for more details.
