@@ -362,7 +362,7 @@ sub do_list {
       @search = ( $ENV{TODOLS}, @search );
     }
   }
-  print "Searching $ftodolist: ", ( join( ' OR ', @search ) ), "\n";
+  print "Searching $ftodolist:", ( join( 'OR', map { " $_ " } @search ) ), "\n";
   while (<$F>) {
     $lineno++;
     chomp;
