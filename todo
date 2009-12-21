@@ -30,33 +30,12 @@ use warnings;
 #use Getopt::Long;
 #use Pod::Usage;
 #use File::Spec; # for base name
-use Fatal qw(open close);
-
 #use Data::Dumper;
+use Fatal qw(open close);
 
 # Options here
 my $ftodolist = '.todo';
-$ftodolist = "$ENV{HOME}/.todo" if ( !-e $ftodolist );
-
-#my $ftodorc = "$ENV{HOME}/.todorc";
-#my $verbose = 0;
-#my $help;
-#my $man = 0;
-#my $xyz;
-#my $result = GetOptions (
-#	verbose  => \$verbose,
-#	help => \$help,
-#	man => \$man,
-#	'todo=s' => \$ftodolist,
-#	#'xyz=s' => \$xyz,
-#) or pod2usage(2);
-#pod2usage(-verbose => 2) if $man;
-#pod2usage({
-#	-verbose  => 99, # custom sections
-#	-sections => 'NAME|DESCRIPTION|SYNOPSIS'
-#}) if ($help
-#	|| (scalar @ARGV == 0)
-#);
+$ftodolist = "$ENV{HOME}/.todo" unless -e $ftodolist;
 
 # sanity test
 if ( !-e $ftodolist ) {
@@ -65,357 +44,42 @@ if ( !-e $ftodolist ) {
   print "Created file $ftodolist\n";
 }
 
+# commands dispatch table
 my %COMMANDS = (
-  'help' => \&do_help,
-  'add'  => sub {
-    if ( scalar @ARGV == 0 ) {
-      print "Syntax: add [p:A-Z] [\@tag \+project] TEXT\n";
-      return;
-    }
-    my $text = "@ARGV";
-
-    #print "Text: >$text<\n";
-    my @spl = split( /\s/, $text );
-    my @tags;
-    my $priority = '';
-    my @text;
-    foreach my $s (@spl) {
-
-      #print "Checking split >$s<\n";
-      if ( $s =~ /^\@/ || $s =~ /^\+/ ) {
-        $s =~ s/\,//;
-        push( @tags, $s );
-        $text =~ s/\Q$s\E\s//i;
-      } elsif ( $s =~ /^p\:/ ) {
-        $priority = $s;
-        $priority =~ s/^p://;
-      } else {
-        push( @text, $s );
-      }
-    }
-    open my $F, '>>', $ftodolist;
-    print $F "$priority\t@tags\t@text\n";
-    close $F;
-    print "Added Pri:$priority (tags @tags) >@text<\n";
-  },
-  'purge' => sub {
-    if ( "@ARGV" eq '' or $#ARGV != 0 ) {
-      print "Syntax: $0 purge <number|done>\n";
-      return;
-    }
-    my $what = shift @ARGV;
-    $what = lc $what;
-    if ( ( $what ne 'done' ) and ( $what !~ /^\d*$/ ) ) {
-      print "What is >$what<\n";
-      print "Syntax: $0 purge <number|done>\n";
-      return;
-    }
-    my $newfile = '';
-    open my $F, '<', $ftodolist;
-    my $lineno = 0;
-    while (<$F>) {
-      $lineno++;
-      chomp;
-      my $d = 0;
-      my ( $priority, $tags, @text ) = split( /\t/, $_ );
-      $priority = uc $priority;
-      if ( $what eq 'done' ) {
-        if ( $priority eq '---DONE' ) {
-          print "Purging #$lineno as DONE: $priority/$tags/@text\n";
-          $d = 1;
-        }
-      } else {
-        if ( $lineno == $what ) {
-          print "Purging #$lineno as requested: $priority/$tags/@text\n";
-          $d = 1;
-        }
-      }
-      if ( !$d ) {
-        $newfile .= "$_\n";
-      }
-    }
-    close $F;
-    open $F, '>', $ftodolist;
-    print $F $newfile;
-    close $F;
-    print "Done\n";
-  },
-  'done' => sub {
-    my @which   = @ARGV;
-    my $newfile = '';
-    open my $F, '<', $ftodolist;
-    my $lineno = 0;
-    while (<$F>) {
-      $lineno++;
-      chomp;
-      my $d = 0;
-      foreach (@which) {
-        $d = 1 if ( "$lineno" eq "$_" );
-      }
-      if ( !$d ) {
-        $newfile .= "$_\n";
-      } else {
-        my ( $priority, $tags, @text ) = split( /\t/, $_ );
-        $priority = '---DONE';
-        $newfile .= "$priority\t$tags\t@text\n";
-      }
-    }
-    close $F;
-    open $F, '>', $ftodolist;
-    print $F $newfile;
-    close $F;
-    print "Done\n";
-  },
-  'tag' => sub {
-    if ( $#ARGV < 1 ) {
-      print "Syntax: $0 tag Number [\@newtag +newtag -\@oldtag -oldtag]\n";
-      return;
-    }
-    my ( $n, @newtags ) = @ARGV;
-    if ( $n !~ /^\d*$/ ) {
-      print "Syntax: $0 tag Number [\@newtag +newtag -\@oldtag -oldtag]\n";
-      return;
-    }
-    if ( !@newtags ) {
-      print "Syntax: $0 tag Number [\@newtag +newtag -\@oldtag -oldtag]\n";
-      return;
-    }
-    my $newfile = '';
-    open my $F, '<', $ftodolist;
-    my $lineno = 0;
-    while (<$F>) {
-      $lineno++;
-      chomp;
-      my $c = 0;
-      $c = 1 if ( $lineno == $n );
-      if ( !$c ) {
-        $newfile .= "$_\n";
-      } else {
-        my ( $priority, $tags, @text ) = split( /\t/, $_ );
-        my @tags = split( /\s/, $tags );
-        foreach my $tag (@newtags) {
-          if ( $tag =~ /^\-/ ) {
-            $tag =~ s/^\-//;
-            my @_tags = grep( !/^[\+\@]*$tag$/, @tags );
-            @tags = @_tags;
-          } else {
-            push( @tags, $tag );
-          }
-        }
-        $newfile .= "$priority\t@tags\t@text\n";
-      }
-    }
-    close $F;
-    open $F, '>', $ftodolist;
-    print $F $newfile;
-    close $F;
-    print "Done\n";
-  },
-  'text' => sub {
-    if ( $#ARGV < 1 ) {
-      print "Syntax: $0 text Number TEXT\n";
-      return;
-    }
-    my ( $n, @text ) = @ARGV;
-    if ( $n !~ /^\d*$/ ) {
-      print "Syntax: $0 text Number TEXT\n";
-      return;
-    }
-    if ( !@text ) {
-      print "Syntax: $0 text Number TEXT\n";
-      return;
-    }
-    my $newfile = '';
-    open my $F, '<', $ftodolist;
-    my $lineno = 0;
-    while (<$F>) {
-      $lineno++;
-      chomp;
-      my $c = 0;
-      $c = 1 if ( $lineno == $n );
-      if ( !$c ) {
-        $newfile .= "$_\n";
-      } else {
-        my ( $priority, $tags, @oldtext ) = split( /\t/, $_ );
-        $newfile .= "$priority\t$tags\t@text\n";
-      }
-    }
-    close $F;
-    open $F, '>', $ftodolist;
-    print $F $newfile;
-    close $F;
-    print "Done\n";
-  },
-  'priority' => sub {
-    if ( $#ARGV != 1 ) {
-      print "Syntax: $0 priority Number New_Priority(A-Z)\n";
-      return;
-    }
-    my ( $n, $newpri ) = @ARGV;
-    if ( $n !~ /^\d*$/ ) {
-      print "Syntax: $0 priority Number New_Priority(A-Z)\n";
-      return;
-    }
-    if ( $newpri !~ /^[a-zA-Z]$/ ) {
-      print "Syntax: $0 priority Number New_Priority(A-Z)\n";
-      return;
-    }
-    my $newfile = '';
-    open my $F, '<', $ftodolist;
-    my $lineno = 0;
-    while (<$F>) {
-      $lineno++;
-      chomp;
-      my $c = 0;
-      $c = 1 if ( $lineno == $n );
-      if ( !$c ) {
-        $newfile .= "$_\n";
-      } else {
-        my ( $priority, $tags, @text ) = split( /\t/, $_ );
-        $newfile .= "$newpri\t$tags\t@text\n";
-      }
-    }
-    close $F;
-    open $F, '>', $ftodolist;
-    print $F $newfile;
-    close $F;
-    print "Done\n";
-  },
-  'birdseye' => sub {
-    my %PROJECTS;
-    my %CONTEXTS;
-    open my $F, '<', $ftodolist;
-    my $lineno = 0;
-    while (<$F>) {
-      $lineno++;
-      chomp;
-      my $line = $_;
-      my ( $priority, $tags, @text ) = split( /\t/, $line );
-      $priority = 'N/A' if ( !defined($priority) || !$priority );
-      $priority = uc $priority;
-      my @tags = split( /\s/, $tags );
-      my @projects = grep( /^\+/, @tags );
-      my @contexts = grep( /^\@/, @tags );
-
-      #print "($priority) >$line< -> proj >@projects< cont >@contexts<\n";
-      if ( $priority ne '---DONE' ) {
-        foreach (@projects) {
-          $PROJECTS{ lc $_ } = 0 if ( !defined( $PROJECTS{ lc $_ } ) );
-          $PROJECTS{ lc $_ }++;
-        }
-        foreach (@contexts) {
-          $CONTEXTS{ lc $_ } = 0 if ( !defined( $CONTEXTS{ lc $_ } ) );
-          $CONTEXTS{ lc $_ }++;
-        }
-      }
-    }
-    close $F;
-    if ( keys %PROJECTS ) {
-      print "Projects with open TODOs:\n";
-      my @p = sort { $PROJECTS{$b} <=> $PROJECTS{$a} } keys %PROJECTS;
-      foreach (@p) {
-        printf( "\t%-4d %s\n", $PROJECTS{$_}, $_ );
-      }
-    }
-    if ( keys %CONTEXTS ) {
-      print "Contexts with open TODOs:\n";
-      my @c = sort { $CONTEXTS{$b} <=> $CONTEXTS{$a} } keys %CONTEXTS;
-      foreach (@c) {
-        printf( "\t%-4d %s\n", $CONTEXTS{$_}, $_ );
-      }
-    }
-  },
-  'list' => sub {
-    my ($kind) = @_;
-    my @search = @ARGV;
-    my %TODO;
-    open my $F, '<', $ftodolist;
-    my $lineno = 0;
-    if ( $kind eq 'ls' or $kind eq 'list' ) {
-      if ( defined( $ENV{TODOLS} ) ) {
-        @search = ( $ENV{TODOLS}, @search );
-      }
-    }
-    print "Searching $ftodolist: ", ( join( ' OR ', @search ) ), "\n";
-    while (<$F>) {
-      $lineno++;
-      chomp;
-      my $line = $_;
-      my $p    = 0;
-      $p = 1 if ( !@search );    # show all
-      if ( "@search" =~ /^\d*$/ ) {
-        $p = 1 if ( "@search" eq $lineno );
-      } else {
-        foreach my $s (@search) {
-
-          #print "Searching for >$s< in $line\n";
-          if ( $line =~ /\Q$s\E/i ) {
-            $p = 1;
-          }
-        }
-      }
-      if ($p) {
-        my ( $priority, $tags, @text ) = split( /\t/, $line );
-        $priority = 'N/A' if ( !defined($priority) || !$priority );
-        $priority = uc $priority;
-        my @t;
-        if ( exists( $TODO{$priority} ) ) {
-          @t = @{ $TODO{$priority} };
-        }
-        my $str;
-        my @tags = split( /\s/, $tags );
-        @tags = sort @tags;
-        $tags = "@tags";
-        if ( $priority eq '---DONE' ) {
-          $str = sprintf( "#%-3d %-4s [%s] %s", $lineno, 'DONE', $tags, "@text" );
-        } else {
-          $str = sprintf( "#%-3d %-4s [%s] %s", $lineno, $priority, $tags, "@text" );
-        }
-        push( @t, $str );
-        $TODO{$priority} = \@t;
-      }
-    }
-    close $F;
-
-    # standard priority
-    foreach my $pri ( sort keys %TODO ) {
-      next if ( $pri eq '---DONE' );
-      my @t = @{ $TODO{$pri} };
-      foreach my $e (@t) {
-        print "$e\n";
-      }
-    }
-
-    # Done:
-    if ( exists( $TODO{'---DONE'} ) ) {
-      my @t = @{ $TODO{'---DONE'} };
-      foreach my $e (@t) {
-        print "$e\n";
-      }
-    }
-  },
+  'help'     => \&do_help,
+  'add'      => \&do_add,
+  'purge'    => \&do_purge,
+  'done'     => \&do_done,
+  'tag'      => \&do_tag,
+  'text'     => \&do_text,
+  'priority' => \&do_priority,
+  'birdseye' => \&do_birdseye,
+  'list'     => \&do_list,
 );
 
 my $cmd;
 if ( scalar @ARGV == 0 ) {
-
-  #print "Use `$0 help` to see the helpfile\n";
-  $cmd = 'list';
+  $cmd = 'list';    # by default, list all todos
 } else {
   $cmd = shift @ARGV;
 }
 $cmd = lc $cmd;
 my $origcmd = $cmd;
 
-# aliases
+# aliases / shortcuts
 $cmd = 'add'      if ( $cmd eq 'a' );
+$cmd = 'list'     if ( $cmd eq 'l' );
 $cmd = 'list'     if ( $cmd eq 'ls' );
 $cmd = 'list'     if ( $cmd eq 'la' );
 $cmd = 'list'     if ( $cmd eq 'listall' );
 $cmd = 'help'     if ( $cmd eq '--help' );
 $cmd = 'help'     if ( $cmd eq '-help' );
+$cmd = 'help'     if ( $cmd eq '-h' );
+$cmd = 'help'     if ( $cmd eq 'h' );
 $cmd = 'priority' if ( $cmd eq 'pri' );
+$cmd = 'priority' if ( $cmd eq 'p' );
 $cmd = 'text'     if ( $cmd eq 'txt' );
+$cmd = 'text'     if ( $cmd eq 't' );
 
 if ( exists $COMMANDS{$cmd} ) {
   $COMMANDS{$cmd}->($origcmd);
@@ -426,20 +90,352 @@ if ( exists $COMMANDS{$cmd} ) {
 
 exit;
 
-sub do_help {
-  print "Syntax:\n";
-  print "todo                  Defaults to LIST\n";
-  print "todo list|ls SEARCH TERMS\n";
-  print "    The env variable TODOLS can add more search terms to this\n";
-  print "todo listall|la SEARCH TERMS\n";
-  print "    Same as list|ls, but ignores the TODOLS env variable\n";
-  print "todo add|a [p:A-Z] [\@context \+project] TEXT\n";
-  print "todo done NUMBER\n";
-  print "todo purge done|NUMBER\n";
-  print "todo priority|pri NUMBER [A-Z]\n";
-  print "todo text|txt NUMBER TEXT\n";
-  print "todo tag NUMBER [\@context +project][-tag -+tag -\@tag]\n";
-  print "todo birdseye\n";
-  return;
+sub do_add {
+  if ( scalar @ARGV == 0 ) {
+    print "Syntax: add [p:A-Z] [\@tag \+project] TEXT\n";
+    return;
+  }
+  my $text = "@ARGV";
+  my @spl = split( /\s/, $text );
+  my @tags;
+  my $priority = '';
+  my @text;
+  foreach my $s (@spl) {
+    if ( $s =~ /^\@/ || $s =~ /^\+/ ) {
+      $s =~ s/\,//;
+      push( @tags, $s );
+      $text =~ s/\Q$s\E\s//i;
+    } elsif ( $s =~ /^p\:/ ) {
+      $priority = $s;
+      $priority =~ s/^p://;
+    } else {
+      push( @text, $s );
+    }
+  }
+  open my $F, '>>', $ftodolist;
+  print $F "$priority\t@tags\t@text\n";
+  close $F;
+  print "Added Pri:$priority (tags @tags) >@text<\n";
 }
 
+sub do_purge {
+  if ( "@ARGV" eq '' or $#ARGV != 0 ) {
+    print "Syntax: $0 purge <number|done>\n";
+    return;
+  }
+  my $what = shift @ARGV;
+  $what = lc $what;
+  if ( ( $what ne 'done' ) and ( $what !~ /^\d*$/ ) ) {
+    print "What is >$what<\n";
+    print "Syntax: $0 purge <number|done>\n";
+    return;
+  }
+  my $newfile = '';
+  open my $F, '<', $ftodolist;
+  my $lineno = 0;
+  while (<$F>) {
+    $lineno++;
+    chomp;
+    my $d = 0;
+    my ( $priority, $tags, @text ) = split( /\t/, $_ );
+    $priority = uc $priority;
+    if ( $what eq 'done' ) {
+      if ( $priority eq '---DONE' ) {
+        print "Purging #$lineno as DONE: $priority/$tags/@text\n";
+        $d = 1;
+      }
+    } else {
+      if ( $lineno == $what ) {
+        print "Purging #$lineno as requested: $priority/$tags/@text\n";
+        $d = 1;
+      }
+    }
+    if ( !$d ) {
+      $newfile .= "$_\n";
+    }
+  }
+  close $F;
+  open $F, '>', $ftodolist;
+  print $F $newfile;
+  close $F;
+  print "Done\n";
+}
+
+sub do_done {
+  my @which   = @ARGV;
+  my $newfile = '';
+  open my $F, '<', $ftodolist;
+  my $lineno = 0;
+  while (<$F>) {
+    $lineno++;
+    chomp;
+    my $d = 0;
+    foreach (@which) {
+      $d = 1 if ( "$lineno" eq "$_" );
+    }
+    if ( !$d ) {
+      $newfile .= "$_\n";
+    } else {
+      my ( $priority, $tags, @text ) = split( /\t/, $_ );
+      $priority = '---DONE';
+      $newfile .= "$priority\t$tags\t@text\n";
+    }
+  }
+  close $F;
+  open $F, '>', $ftodolist;
+  print $F $newfile;
+  close $F;
+  print "Done\n";
+}
+
+sub do_tag {
+  if ( $#ARGV < 1 ) {
+    print "Syntax: $0 tag Number [\@newtag +newtag -\@oldtag -oldtag]\n";
+    return;
+  }
+  my ( $n, @newtags ) = @ARGV;
+  if ( $n !~ /^\d*$/ ) {
+    print "Syntax: $0 tag Number [\@newtag +newtag -\@oldtag -oldtag]\n";
+    return;
+  }
+  if ( !@newtags ) {
+    print "Syntax: $0 tag Number [\@newtag +newtag -\@oldtag -oldtag]\n";
+    return;
+  }
+  my $newfile = '';
+  open my $F, '<', $ftodolist;
+  my $lineno = 0;
+  while (<$F>) {
+    $lineno++;
+    chomp;
+    my $c = 0;
+    $c = 1 if ( $lineno == $n );
+    if ( !$c ) {
+      $newfile .= "$_\n";
+    } else {
+      my ( $priority, $tags, @text ) = split( /\t/, $_ );
+      my @tags = split( /\s/, $tags );
+      foreach my $tag (@newtags) {
+        if ( $tag =~ /^\-/ ) {
+          $tag =~ s/^\-//;
+          my @_tags = grep( !/^[\+\@]*$tag$/, @tags );
+          @tags = @_tags;
+        } else {
+          push( @tags, $tag );
+        }
+      }
+      $newfile .= "$priority\t@tags\t@text\n";
+    }
+  }
+  close $F;
+  open $F, '>', $ftodolist;
+  print $F $newfile;
+  close $F;
+  print "Done\n";
+}
+
+sub do_text {
+  if ( $#ARGV < 1 ) {
+    print "Syntax: $0 text Number TEXT\n";
+    return;
+  }
+  my ( $n, @text ) = @ARGV;
+  if ( $n !~ /^\d*$/ ) {
+    print "Syntax: $0 text Number TEXT\n";
+    return;
+  }
+  if ( !@text ) {
+    print "Syntax: $0 text Number TEXT\n";
+    return;
+  }
+  my $newfile = '';
+  open my $F, '<', $ftodolist;
+  my $lineno = 0;
+  while (<$F>) {
+    $lineno++;
+    chomp;
+    my $c = 0;
+    $c = 1 if ( $lineno == $n );
+    if ( !$c ) {
+      $newfile .= "$_\n";
+    } else {
+      my ( $priority, $tags, @oldtext ) = split( /\t/, $_ );
+      $newfile .= "$priority\t$tags\t@text\n";
+    }
+  }
+  close $F;
+  open $F, '>', $ftodolist;
+  print $F $newfile;
+  close $F;
+  print "Done\n";
+}
+
+sub do_priority {
+  if ( $#ARGV != 1 ) {
+    print "Syntax: $0 priority Number New_Priority(A-Z)\n";
+    return;
+  }
+  my ( $n, $newpri ) = @ARGV;
+  if ( $n !~ /^\d*$/ ) {
+    print "Syntax: $0 priority Number New_Priority(A-Z)\n";
+    return;
+  }
+  if ( $newpri !~ /^[a-zA-Z]$/ ) {
+    print "Syntax: $0 priority Number New_Priority(A-Z)\n";
+    return;
+  }
+  my $newfile = '';
+  open my $F, '<', $ftodolist;
+  my $lineno = 0;
+  while (<$F>) {
+    $lineno++;
+    chomp;
+    my $c = 0;
+    $c = 1 if ( $lineno == $n );
+    if ( !$c ) {
+      $newfile .= "$_\n";
+    } else {
+      my ( $priority, $tags, @text ) = split( /\t/, $_ );
+      $newfile .= "$newpri\t$tags\t@text\n";
+    }
+  }
+  close $F;
+  open $F, '>', $ftodolist;
+  print $F $newfile;
+  close $F;
+  print "Done\n";
+}
+
+sub do_birdseye {
+  my %PROJECTS;
+  my %CONTEXTS;
+  open my $F, '<', $ftodolist;
+  my $lineno = 0;
+  while (<$F>) {
+    $lineno++;
+    chomp;
+    my $line = $_;
+    my ( $priority, $tags, @text ) = split( /\t/, $line );
+    $priority = 'N/A' if ( !defined($priority) || !$priority );
+    $priority = uc $priority;
+    my @tags = split( /\s/, $tags );
+    my @projects = grep( /^\+/, @tags );
+    my @contexts = grep( /^\@/, @tags );
+
+    #print "($priority) >$line< -> proj >@projects< cont >@contexts<\n";
+    if ( $priority ne '---DONE' ) {
+      foreach (@projects) {
+        $PROJECTS{ lc $_ } = 0 if ( !defined( $PROJECTS{ lc $_ } ) );
+        $PROJECTS{ lc $_ }++;
+      }
+      foreach (@contexts) {
+        $CONTEXTS{ lc $_ } = 0 if ( !defined( $CONTEXTS{ lc $_ } ) );
+        $CONTEXTS{ lc $_ }++;
+      }
+    }
+  }
+  close $F;
+  if ( keys %PROJECTS ) {
+    print "Projects with open TODOs:\n";
+    my @p = sort { $PROJECTS{$b} <=> $PROJECTS{$a} } keys %PROJECTS;
+    foreach (@p) {
+      printf( "\t%-4d %s\n", $PROJECTS{$_}, $_ );
+    }
+  }
+  if ( keys %CONTEXTS ) {
+    print "Contexts with open TODOs:\n";
+    my @c = sort { $CONTEXTS{$b} <=> $CONTEXTS{$a} } keys %CONTEXTS;
+    foreach (@c) {
+      printf( "\t%-4d %s\n", $CONTEXTS{$_}, $_ );
+    }
+  }
+}
+
+sub do_list {
+  my ($kind) = @_;
+  my @search = @ARGV;
+  my %TODO;
+  open my $F, '<', $ftodolist;
+  my $lineno = 0;
+  if ( $kind eq 'ls' or $kind eq 'list' ) {
+    if ( defined( $ENV{TODOLS} ) ) {
+      @search = ( $ENV{TODOLS}, @search );
+    }
+  }
+  print "Searching $ftodolist: ", ( join( ' OR ', @search ) ), "\n";
+  while (<$F>) {
+    $lineno++;
+    chomp;
+    my $line = $_;
+    my $p    = 0;
+    $p = 1 if ( !@search );    # show all
+    if ( "@search" =~ /^\d*$/ ) {
+      $p = 1 if ( "@search" eq $lineno );
+    } else {
+      foreach my $s (@search) {
+
+        #print "Searching for >$s< in $line\n";
+        if ( $line =~ /\Q$s\E/i ) {
+          $p = 1;
+        }
+      }
+    }
+    if ($p) {
+      my ( $priority, $tags, @text ) = split( /\t/, $line );
+      $priority = 'N/A' if ( !defined($priority) || !$priority );
+      $priority = uc $priority;
+      my @t;
+      if ( exists( $TODO{$priority} ) ) {
+        @t = @{ $TODO{$priority} };
+      }
+      my $str;
+      my @tags = split( /\s/, $tags );
+      @tags = sort @tags;
+      $tags = "@tags";
+      if ( $priority eq '---DONE' ) {
+        $str = sprintf( "#%-3d %-4s [%s] %s", $lineno, 'DONE', $tags, "@text" );
+      } else {
+        $str = sprintf( "#%-3d %-4s [%s] %s", $lineno, $priority, $tags, "@text" );
+      }
+      push( @t, $str );
+      $TODO{$priority} = \@t;
+    }
+  }
+  close $F;
+
+  # standard priority
+  foreach my $pri ( sort keys %TODO ) {
+    next if ( $pri eq '---DONE' );
+    my @t = @{ $TODO{$pri} };
+    foreach my $e (@t) {
+      print "$e\n";
+    }
+  }
+
+  # Done:
+  if ( exists( $TODO{'---DONE'} ) ) {
+    my @t = @{ $TODO{'---DONE'} };
+    foreach my $e (@t) {
+      print "$e\n";
+    }
+  }
+}
+
+sub do_help {
+  print <<'ENDHELP';
+Syntax:
+todo                  Defaults to LIST
+todo list|ls SEARCH TERMS
+The env variable TODOLS can add more search terms to this
+todo listall|la SEARCH TERMS
+    Same as list|ls, but ignores the TODOLS env variable
+todo add|a [p:A-Z] [\@context \+project] TEXT
+todo done NUMBER
+todo purge done|NUMBER
+todo priority|pri NUMBER [A-Z]
+todo text|txt NUMBER TEXT
+todo tag NUMBER [\@context +project][-tag -+tag -\@tag]
+todo birdseye
+ENDHELP
+  return;
+}
